@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <title>Library</title>
+    <style>
+        .dropdown-menu {
+            width: 100%;
+        }
+        .dropdown-menu form {
+            width: 100%;
+        }
+        .list-group-item {
+            cursor: pointer;
+        }
+    </style>
+    <script>
+        function getLibraryContents() {
+            fetch('/api/get_novels')
+                .then(response => response.json())
+                .then(data => {
+                    const deleteForm = document.getElementById('delete-form');
+                    if (deleteForm) {
+                        deleteForm.innerHTML = data.html_content;
+                    } else {
+                        console.error("Delete form element not found.");
+                    }
+                })
+                .catch(error => console.error("Error fetching library content: ", error));
+        }
+    </script>
+</head>
+<body onload="getLibraryContents()">
+    <div class="container mt-5">
+        <h2 class="mb-4">Library Contents
+            <button class="btn btn-secondary btn-sm" id="toggle-settings">Toggle Settings</button>
+        </h2>
+        <form id="delete-form" action='/api/delete_novels' method="post">
+        </form>
+        <h2 class="mb-4">User Library</h2>
+        <div class="dropdown mb-4">
+            <button type="button" class="btn btn-primary dropdown-toggle" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                Add Novel
+            </button>
+            <div class="dropdown-menu p-4">
+                <form action='/api/add_novel' method="post">
+                    <div class="form-group mb-1">
+                        <label for="title" class="form-label">Title</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+                    <div class="form-group mb-1">
+                        <label for="link" class="form-label">Link</label>
+                        <input type="url" class="form-control" id="link" name="link" placeholder="https://[primary url]/chapter-[chapter number]"required>
+                    </div>
+                    <div class="form-group mb-1">
+                        <label for="current_chapter" class="form-label">Current Chapter</label>
+                        <input type="number" class="form-control" id="current_chapter" name="current_chapter" required>
+                    </div>
+                    <div class="form-group mb-1">
+                        <label for="total_chapters" class="form-label">Total Chapters</label>
+                        <input type="number" class="form-control" id="total_chapters" name="total_chapters" required>
+                    </div>
+                    <div class="form-group mb-1">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-control" id="status" name="status" required>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Hiatus">Hiatus</option>
+                            <option value="Dropped">Dropped</option>
+                            <option value="Finished">Finished</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-2">Submit</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>    <script>
+        $(document).ready(function() {
+            $('#toggle-settings').click(function() {
+                $('.delete-checkbox').toggle();
+                $('#delete-button').toggle();
+            });
+            $('#delete-button').click(function() {
+                if ($('.delete-checkbox:checked').length === 0) {
+                    alert('Please select at least one novel to delete.');
+                    return false; 
+                }
+            });
+            $('.dropdown-menu').on('click', function(e) {
+                e.stopPropagation();
+            });
+            $('.dropdown-toggle').click(function() {
+                $(this).next('.dropdown-menu').toggle();
+            });
+        });
+    </script>
+</body>
+</html>

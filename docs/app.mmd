@@ -1,0 +1,67 @@
+sequenceDiagram
+    participant User
+    participant Flask as Flask App
+    participant OAuth as Google OAuth
+    participant DB as Database
+    participant Selenium as Selenium WebDriver
+
+    User->>Flask: Access /
+    Flask->>User: Redirect to /google if not logged in
+
+    User->>Flask: Access /google
+    Flask->>OAuth: Register OAuth client
+    OAuth->>User: Redirect to Google login
+
+    User->>OAuth: Authenticate
+    OAuth->>Flask: Callback with token
+    Flask->>User: Set user session, redirect to /
+
+    User->>Flask: Access / route
+    Flask->>User: Render index.html
+
+    rect rgb(200, 220, 240)
+    Note right of User: API: Get Novels
+    User->>Flask: GET /api/get_novels
+    Flask->>DB: Get all novels
+    DB->>Flask: Return novels
+    Flask->>User: Return HTML content
+    end
+
+    rect rgb(220, 240, 200)
+    Note right of User: API: Add Novel
+    User->>Flask: POST /api/add_novel
+    Flask->>DB: Add novel
+    Flask->>User: Redirect to /
+    end
+
+    rect rgb(240, 220, 200)
+    Note right of User: API: Delete Novels
+    User->>Flask: POST /api/delete_novels
+    Flask->>DB: Delete novels
+    Flask->>User: Redirect to /
+    end
+
+    rect rgb(200, 240, 220)
+    Note right of User: API: Navigate Chapters
+    User->>Flask: POST /api/navigate_chapters
+    Flask->>DB: Get chapter info
+    DB->>Flask: Return chapter info
+    Flask->>User: Return navigation URL
+    end
+
+    rect rgb(240, 200, 220)
+    Note right of User: API: Extract Chapter
+    User->>Flask: POST /api/extract
+    Flask->>DB: Get navigated chapter content
+    alt Content not in DB
+        Flask->>Selenium: Get reader mode content
+        Selenium->>Flask: Return content
+        Flask->>DB: Update chapter content
+    end
+    Flask->>User: Return chapter content
+
+    Flask->>Flask: preload_async (background)
+    Flask->>Selenium: Get reader mode content
+    Selenium->>Flask: Return content
+    Flask->>DB: Update adjacent preloaded chapters as needed
+    end

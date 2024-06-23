@@ -1,0 +1,11 @@
+# Ignore ALL environment-specific files
+.env
+
+# ignore ALL files in ANY directory named .venv
+.venv/
+
+# ignore ALL .db files
+*.db
+
+# ignroe ALL files in ANY directory named __pycache__
+__pycache__/

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% if title %}
+        <title> {{ title }} </title>
+    {% endif %}
+    <style>
+        body.light-mode {
+            background-color: white;
+            color:black;
+        }
+        body.dark-mode {
+            background-color: #1E1E1E;
+            color: #B0B0B0;
+        }
+        .settings-panel {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            color: black;
+            padding: 20px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+        .settings-panel input,
+        .settings-panel select {
+            margin-bottom: 10px;
+        }
+    </style>
+    <script>
+        function getChapterContent() {
+            const urlParams = new URLSearchParams(window.location.search)
+            const url = urlParams.get('url')
+            if (url == null) {
+                return
+            }
+            fetch('/api/extract', {
+                method: 'POST',
+                headers: {
+                'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ url: url })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const title = document.getElementById('title');
+                if (title) {
+                    title.innerHTML = data.title;
+                } else {
+                    console.error("Title element not found.");
+                }
+                const extracted_content = document.getElementById('extracted-content');
+                if (extracted_content){
+                    extracted_content.innerHTML = data.extracted_content;
+                } else {
+                    console.error("Extracted content element not found.")
+                }
+            })
+            .catch(error => console.error("Error fetching chapter content: ", error));
+        }
+    </script>
+</head>
+<body onload="getChapterContent()" class="light-mode">
+    <div class="container mt-5">
+        <h1 class="mt-4" id="title"></h1>
+        <button id="settingsButton" class="btn btn-secondary">Settings</button>
+        <div id="settingsPanel" class="settings-panel">
+            <h5>Display Options</h5>
+            <label for="modeSelect" class="form-label">Mode:</label>
+            <select id="modeSelect" class="form-control">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+            </select>
+            <label for="fontSelect" class="form-label">Font:</label>
+            <select id="fontSelect" class="form-select">
+                <option value="Arial">Arial</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Verdana">Verdana</option>
+            </select>
+            <label for="fontSizeInput" class="form-label">Font Size:</label>
+            <input type="number" id="fontSizeInput" class="form-control" value="16">
+        </div>
+        <div class="content mt-4" id="extracted-content">
+            <p>Loading...</p>
+        </div>
+        <div class="mt-4">
+            <button id="previousButton" class="btn btn-primary" onClick="">Previous</button>
+            <button id="homeButton" class="btn btn-primary">Home</button>
+            <button id="nextButton" class="btn btn-primary" onClick="">Next</button>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>    <script>
+    $(document).ready(function() {
+        $("#settingsButton").on("click", function () {
+            var panel = $("#settingsPanel");
+            panel.css("display", panel.css("display") === 'block' ? 'none' : 'block');
+        });
+
+        $("#modeSelect").on("change", function() {
+            $("body").attr("class", $(this).val() + '-mode');
+        });
+
+        $("#fontSelect").on("change", function() {
+            $(".content").css("font-family", $(this).val());
+        });
+
+        $("#fontSizeInput").on("input", function() {
+            $(".content").css("font-size", $(this).val() + "px");
+        });
+
+        const buttonIds = ["previousButton", "homeButton", "nextButton"];
+        $.each(buttonIds, function(index, id) {
+            $("#" + id).on("click", function() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const url = urlParams.get('url');
+                if (url == null) {
+                    return;
+                }
+                $.ajax({
+                    url: '/api/navigate_chapters',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ url: url, id: id }),
+                    success: function(data) {
+                        if (data.navigate_url != "") {
+                            if (data.navigate_url == "/") {
+                                window.location.href = '/';
+                            } else {
+                                window.location.href = '/extract?url=' + data.navigate_url;
+                            }
+                        }
+                    },
+                    error: function(error) {
+                        console.error("Error navigating chapters: ", error);
+                    }
+                });
+            });
+        });
+    });
+    </script>
+</body>
+</html>
