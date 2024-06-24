@@ -57,12 +57,34 @@
                 const extracted_content = document.getElementById('extracted-content');
                 if (extracted_content){
                     extracted_content.innerHTML = data.extracted_content;
+                    getDisplayPreferences();
                 } else {
                     console.error("Extracted content element not found.")
                 }
             })
             .catch(error => console.error("Error fetching chapter content: ", error));
         }
+        function getDisplayPreferences() {
+            fetch('/api/get_display_preferences', {
+                method: 'GET',
+                headers: {
+                'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.body.className = data.mode + '-mode';
+                const extracted_content = document.getElementById('extracted-content');
+                if (extracted_content) {
+                    extracted_content.style.fontFamily = data.font;
+                    extracted_content.style.fontSize = data.font_size + 'px';
+                }
+                document.getElementById('modeSelect').value = data.mode;
+                document.getElementById('fontSelect').value = data.font;
+                document.getElementById('fontSizeInput').value = data.font_size;
+            })
+            .catch(error => console.error("Error fetching display preferences: ", error));
+        };
     </script>
 </head>
 <body onload="getChapterContent()" class="light-mode">
@@ -86,6 +108,7 @@
             </select>
             <label for="fontSizeInput" class="form-label">Font Size:</label>
             <input type="number" id="fontSizeInput" class="form-control" value="16">
+            <button id ="savePreferenceButton" class = "btn btn-primary mt-3">Save Preferences</button>
         </div>
         <div class="content mt-4" id="extracted-content">
             <p>Loading...</p>
@@ -114,6 +137,24 @@
         $("#fontSizeInput").on("input", function() {
             $(".content").css("font-size", $(this).val() + "px");
         });
+
+        $("#savePreferenceButton").on("click", function() {
+            const mode = $("#modeSelect").val();
+            const font = $("#fontSelect").val();
+            const font_size = $("#fontSizeInput").val();
+            if (mode == null || font == null || font_size == null) {
+                return;
+            }
+            $.ajax({
+                url: '/api/update_display_preferences',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({mode: mode, font: font, font_size: font_size}),
+                error: function(error) {
+                    console.error("Error updating display preferences: ", error)
+                }
+            })
+        })
 
         const buttonIds = ["previousButton", "homeButton", "nextButton"];
         $.each(buttonIds, function(index, id) {

@@ -3,13 +3,14 @@ import logging
 
 DATABASE_NAME = 'library.db'
 LIBRARY_TABLE = 'library'
+DISPLAY_TABLE = 'display_preferences'
 
 """
 (user_id) is unique identifier for logged-in user
 (base_url) is unique identifier (primary url) for novel
 """
 
-def add_database_novel(user_id, title, current_chapter, total_chapters, status, link, base_url):
+def add_database_novel(user_id, title, current_chapter, total_chapters, status, link, base_url, time):
     conn = None
     try:
         conn = sqlite3.connect(DATABASE_NAME)
@@ -17,7 +18,7 @@ def add_database_novel(user_id, title, current_chapter, total_chapters, status, 
         c = conn.cursor()
         c.execute('SELECT COUNT(*) FROM {} WHERE user_id=? AND base_url=?'.format(LIBRARY_TABLE), (user_id, base_url))
         if c.fetchone()[0] == 0:
-            c.execute('INSERT INTO library (user_id, title, current_chapter, total_chapters, status, current_url, base_url) VALUES (?, ?, ?, ?, ?, ?, ?)', (user_id, title, current_chapter, total_chapters, status, link, base_url))
+            c.execute('INSERT INTO library (user_id, title, current_chapter, total_chapters, status, current_url, base_url, time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (user_id, title, current_chapter, total_chapters, status, link, base_url, time))
             conn.commit()
         else:
             conn.rollback()
@@ -26,7 +27,7 @@ def add_database_novel(user_id, title, current_chapter, total_chapters, status, 
     except sqlite3.Error as error:
         if conn:
             conn.rollback()
-        logging.error(f'Error in get_all_database_novels: {error}')
+        logging.error(f'Error in add_database_novel: {error}')
     finally:
         if conn:
             conn.close()
@@ -53,7 +54,7 @@ def get_all_database_novels(user_id):
     try:
         conn = sqlite3.connect(DATABASE_NAME)
         c = conn.cursor()
-        c.execute('SELECT title, current_chapter, total_chapters, status, current_url, base_url FROM {} WHERE user_id=?'.format(LIBRARY_TABLE), (user_id,))
+        c.execute('SELECT title, current_chapter, total_chapters, status, current_url, base_url FROM {} WHERE user_id=? ORDER BY datetime(time) DESC'.format(LIBRARY_TABLE), (user_id,))
         library = c.fetchall()
         return library
     except sqlite3.Error as error:
@@ -134,7 +135,7 @@ def update_chapter_content(user_id, base_url, case, chapter_number, url, content
         conn = sqlite3.connect(DATABASE_NAME)
         conn.execute('BEGIN TRANSACTION')
         c = conn.cursor()
-        c.execute('UPDATE library SET {}_chapter=?, {}_url=?, {}_content=? WHERE user_id=? AND base_url=?'.format(case, case, case), (chapter_number, url, content, user_id, base_url, ))
+        c.execute('UPDATE {} SET {}_chapter=?, {}_url=?, {}_content=? WHERE user_id=? AND base_url=?'.format(LIBRARY_TABLE, case, case, case), (chapter_number, url, content, user_id, base_url, ))
         conn.commit()
     except sqlite3.Error as error:
         if conn:
@@ -154,13 +155,63 @@ def move_chapter(user_id, url, case1, case2):
         conn = sqlite3.connect(DATABASE_NAME)
         conn.execute('BEGIN TRANSACTION')
         c = conn.cursor()
-        c.execute('UPDATE library SET {}_chapter={}_chapter, {}_url={}_url, {}_content={}_content WHERE user_id=? AND base_url=?'.format(case1, case2, case1, case2, case1, case2), (user_id, url, ))
+        c.execute('UPDATE {} SET {}_chapter={}_chapter, {}_url={}_url, {}_content={}_content WHERE user_id=? AND base_url=?'.format(LIBRARY_TABLE, case1, case2, case1, case2, case1, case2), (user_id, url, ))
         conn.commit()
         return
     except sqlite3.Error as error:
         if conn:
             conn.rollback()
         logging.error(f'Error in move_chapter_content: {error}')
+    finally:
+        if conn:
+            conn.close()
+
+def update_read_history(user_id, base_url, time):
+    conn = None
+    try:
+        conn = sqlite3.connect(DATABASE_NAME)
+        conn.execute('BEGIN TRANSACTION')
+        c = conn.cursor()
+        c.execute('UPDATE {} SET time=? WHERE user_id=? AND base_url=?'.format(LIBRARY_TABLE), (time, user_id, base_url))
+        conn.commit()
+    except sqlite3.Error as error:
+        if conn:
+            conn.rollback()
+        logging.log(f'Error in update_read_history: {error}')
+    finally:
+        if conn:
+            conn.close()
+
+def get_display_preferences(user_id):
+    conn = None
+    try:
+        conn = sqlite3.connect(DATABASE_NAME)
+        c = conn.cursor()
+        c.execute('SELECT mode, font, font_size FROM {} WHERE user_id=?'.format(DISPLAY_TABLE), (user_id, ))
+        result = c.fetchone()
+        conn.commit()
+        if result:
+            return result[0], result[1], result[2]
+        else:
+            return "light", "Arial", 16 
+    except sqlite3.Error as error:
+        logging.log(f'Error in get_display_preferences: {error}')
+    finally:
+        if conn:
+            conn.close()
+
+def update_display_preferences(user_id, mode, font, font_size):
+    conn = None
+    try:
+        conn = sqlite3.connect(DATABASE_NAME)
+        conn.execute('BEGIN TRANSACTION')
+        c = conn.cursor()
+        c.execute('INSERT OR REPLACE INTO {} (user_id, mode, font, font_size) VALUES (?, ?, ?, ?)'.format(DISPLAY_TABLE), (user_id, mode, font, font_size))
+        conn.commit()
+    except sqlite3.Error as error:
+        if conn:
+            conn.rollback()
+        logging.log(f'Error in update_display_preferences: {error}')
     finally:
         if conn:
             conn.close()

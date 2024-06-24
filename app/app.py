@@ -10,6 +10,7 @@ from authlib.common.security import generate_token
 import keyring
 from dotenv import load_dotenv
 import validators
+from datetime import datetime
 
 # Selenium imports
 from selenium import webdriver
@@ -28,7 +29,10 @@ from database import (
     get_preload_urls,
     get_chapter_content,
     update_chapter_content,
-    move_chapter
+    move_chapter,
+    update_read_history,
+    get_display_preferences,
+    update_display_preferences
     )
 
 # Get the absolute path of the current file (main.py)
@@ -147,7 +151,7 @@ def add_novel():
     status = request.form['status']
     link = request.form['link']
     base_url = link.split('/chapter')[0]
-    add_database_novel(user_id, title, current_chapter, total_chapters, status, link, base_url)
+    add_database_novel(user_id, title, current_chapter, total_chapters, status, link, base_url, datetime.now().isoformat())
     return redirect('/')
 
 # API endpoint to delete novels from session user's library.
@@ -219,6 +223,7 @@ def extract_chapter():
         extracted_content=get_chapter_content(session.get('user'), base_url, "next")
         # Preload new next chapter after the current "next" chapter
         preload_async(session.get('user'), "next", base_url, chapter_number + 1)
+    update_read_history(session.get('user'), base_url, datetime.now().isoformat())
     return jsonify(title=title, extracted_content=extracted_content)
 
 # Asynchronously preload chapter content
@@ -307,6 +312,32 @@ def get_reader_mode_content(url):
     finally:
         if driver:
             driver.quit()
+
+@app.route('/api/get_display_preferences', methods=['GET'])
+@login_required
+def api_get_display_preferences():
+    user_id = session.get('user')
+    mode, font, font_size = get_display_preferences(user_id)
+    return jsonify({
+        'mode': mode,
+        'font': font,
+        'font_size': font_size
+    })
+
+@app.route('/api/update_display_preferences', methods=['POST'])
+@login_required
+def api_update_display_preferences():
+    user_id = session.get('user')
+    data = request.get_json()
+    mode = data.get('mode')
+    font = data.get('font')
+    font_size = data.get('font_size')
+    try:
+        update_display_preferences(user_id, mode, font, font_size)
+        return jsonify({'status': 'success'})
+    except Exception as error:
+        logging.error(f'Error updating display preferences: {error}')
+        return jsonify({'status': 'error'})
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000, debug=True, use_reloader=True)
