@@ -116,27 +116,32 @@ def get_novels():
     library = get_all_database_novels(session.get('user'))
     if library is None:
         return jsonify(html_content="")
-    html_content = """<ul class="list-group">"""
+    html_content = """<div class="row">"""
     for novel in library:
         html_content += """
-                <li class="list-group-item novel-link">
-                    <a href="/extract?url={current_url}" class="list-group-item list-group-item-action">
-                        <input type="checkbox" class="form-check-input delete-checkbox" name="delete[]" value="{base_url}" style="display: none;">
-                        <h5>{title}</h5>
-                        <p>Current Chapter: {current_chapter} / {total_chapters}</p>
-                        <p>Status: {status}</p>
-                    </a>
-                </li>""".format(
-                    current_url = novel[4],
-                    base_url = novel[5],
-                    title = novel[0],
-                    current_chapter = novel[1],
-                    total_chapters = novel[2],
-                    status = novel[3]
-                )
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">{title}</h5>
+                        <p class="card-text">Current Chapter: {current_chapter} / {total_chapters}</p>
+                        <p class="card-text"><small class="text-muted">Status: {status}</small></p>
+                        <a href="/extract?url={current_url}" class="btn btn-primary">Read</a>
+                        <div class="form-check mt-2">
+                            <input type="checkbox" class="form-check-input delete-checkbox" name="delete[]" value="{base_url}" id="delete-{base_url}">
+                        </div>
+                    </div>
+                </div>
+            </div>""".format(
+                current_url = novel[4],
+                base_url = novel[5],
+                title = novel[0],
+                current_chapter = novel[1],
+                total_chapters = novel[2],
+                status = novel[3]
+            )
     html_content += """
-            </ul>
-            <button type="submit" class="btn btn-danger" id="delete-button" style="display: none;">Delete Selected</button>"""
+        </div>
+        <button type="submit" class="btn btn-danger mt-3" id="delete-button">Delete Selected</button>"""
     return jsonify(html_content=html_content)
 
 # API endpoint to add novel to session user's library. 
@@ -203,34 +208,30 @@ def extract_chapter():
     base_url = url.split('/chapter')[0] # novel's primary url for database query identification
     title, chapter_number = get_chapter_title_and_number(session.get('user'), base_url)
     prev_url, cur_url, next_url = get_preload_urls(session.get('user'), base_url)
-    extracted_content=""
-    # Extracting the preloaded previous chapter
+    
     if url == prev_url:
-        extracted_content=get_chapter_content(session.get('user'), base_url, "previous")
-        # Preload new previous chapter before the current "previous" chapter
+        extracted_content = get_chapter_content(session.get('user'), base_url, "previous")
         preload_async(session.get('user'), "previous", base_url, chapter_number - 1)
-    # Extracting the preloaded current chapter
     elif url == cur_url:
-        extracted_content=get_chapter_content(session.get('user'), base_url, "current")
-        if (extracted_content is None):
-            extracted_content=get_reader_mode_content(url)
+        extracted_content = get_chapter_content(session.get('user'), base_url, "current")
+        if extracted_content is None:
+            extracted_content = get_reader_mode_content(url)
             update_chapter_content(session.get('user'), base_url, "current", chapter_number, url, extracted_content)
-        # Preload adjacent chapters if not preloaded. 
         if (prev_url is None and chapter_number > 1) or next_url is None or prev_url == cur_url or cur_url == next_url:
             preload_async(session.get('user'), "current", base_url, chapter_number)
-    # Extracting the preloaded next chapter
     elif url == next_url:
-        extracted_content=get_chapter_content(session.get('user'), base_url, "next")
-        # Preload new next chapter after the current "next" chapter
+        extracted_content = get_chapter_content(session.get('user'), base_url, "next")
         preload_async(session.get('user'), "next", base_url, chapter_number + 1)
+    else:
+        return abort(404)
+
     update_read_history(session.get('user'), base_url, datetime.now().isoformat())
     return jsonify(title=title, extracted_content=extracted_content)
 
 # Asynchronously preload chapter content
 # Starts a new thread to run preload function in the background. 
 def preload_async(user_id, case, base_url, chapter_number):
-    thread = threading.Thread(target=preload, args=(user_id, case, base_url, chapter_number))
-    thread.start()
+    threading.Thread(target=preload, args=(user_id, case, base_url, chapter_number), daemon=True).start()
 
 # Preload chapter content for smooth navigation
 # Handles different preloading cases to ensure that previous, current, and next chapters are always available for quick access. 
@@ -246,50 +247,31 @@ def preload(user_id, case, base_url, chapter_number):
         - "next" case:     [current, next, new_next]            >   [previous, current, next]
     """
     if case == "current":
-        # Preload adjacent previous and next chapters for the current case. 
-        if (chapter_number > 1):
-            # Preload previous chapter if not in first chapter. 
-            preload_url = get_url_redirect(base_url + '/chapter-' + str(chapter_number - 1))
-            preload_content = get_reader_mode_content(preload_url)
-            update_chapter_content(user_id, base_url, "previous", chapter_number - 1, preload_url, preload_content)
-        preload_url = get_url_redirect(base_url + '/chapter-' + str(chapter_number + 1))
-        preload_content = get_reader_mode_content(preload_url)
-        update_chapter_content(user_id, base_url, "next", chapter_number + 1, preload_url, preload_content)
+        if chapter_number > 1:
+            preload_chapter(user_id, base_url, "previous", chapter_number - 1)
+        preload_chapter(user_id, base_url, "next", chapter_number + 1)
     elif case in ["previous", "next"]:
-        if case == "previous":
-            move_chapter(user_id, base_url, "next", "current")
-            move_chapter(user_id, base_url, "current", "previous")
-            # Don't preload previous if at first chapter.
-            if chapter_number == 1:
-                preload_url = None
-            else:
-                # Preload 'new' previous url
-                preload_chapter_number = chapter_number - 1
-                preload_url = get_url_redirect(base_url + '/chapter-' + str(preload_chapter_number))
-        elif case == "next":
-            move_chapter(user_id, base_url, "previous", "current")
-            move_chapter(user_id, base_url, "current", "next")
-            # Preload 'new' next url
-            preload_chapter_number = chapter_number + 1
-            preload_url = get_url_redirect(base_url + '/chapter-' + str(preload_chapter_number))
-        # Fetch and update content for new preloaded chapter. 
-        if preload_url:
-            preload_content = get_reader_mode_content(preload_url)
-            update_chapter_content(user_id, base_url, case, preload_chapter_number, preload_url, preload_content)
+        move_chapter(user_id, base_url, "next" if case == "previous" else "previous", "current")
+        move_chapter(user_id, base_url, "current", case)
+        preload_chapter_number = chapter_number - 1 if case == "previous" else chapter_number + 1
+        if case == "previous" and chapter_number > 1 or case == "next":
+            preload_chapter(user_id, base_url, case, preload_chapter_number)
+
+def preload_chapter(user_id, base_url, position, chapter_number):
+    preload_url = get_url_redirect(f"{base_url}/chapter-{chapter_number}")
+    if preload_url:
+        preload_content = get_reader_mode_content(preload_url)
+        update_chapter_content(user_id, base_url, position, chapter_number, preload_url, preload_content)
 
 # Uses Selenium webdriver to return url redirect
 def get_url_redirect(url):
     try:
-        driver = webdriver.Firefox(options=options)
-        driver.get(url)
-        final_url = driver.current_url
-        return final_url
+        with webdriver.Firefox(options=options) as driver:
+            driver.get(url)
+            return driver.current_url
     except Exception as error:
         logging.error(f'Error in get_url_redirect: {error}')
         return None
-    finally:
-        if driver:
-            driver.quit()
 
 # Extracts the reader view content of given url
 # Uses Selenium webdriver to render page and extract text from reader view. 
@@ -297,21 +279,14 @@ def get_reader_mode_content(url):
     if url is None:
         return None
     try:
-        # https://github.com/mozilla/readability
-        # https://github.com/buriy/python-readability?tab=readme-ov-file 
-        driver = webdriver.Firefox(options=options)
-        # Firefox's internal link for reader view 
-        driver.get(f'about:reader?url={url}')
-        reader_content = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, 'moz-reader-content')))
-        paragraphs = WebDriverWait(reader_content, 10).until(EC.presence_of_all_elements_located((By.TAG_NAME, 'p')))
-        extracted_content = "".join(['<p>' + paragraph.text + '</p>' for paragraph in paragraphs])
-        return extracted_content
+        with webdriver.Firefox(options=options) as driver:
+            driver.get(f'about:reader?url={url}')
+            reader_content = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, 'moz-reader-content')))
+            paragraphs = WebDriverWait(reader_content, 10).until(EC.presence_of_all_elements_located((By.TAG_NAME, 'p')))
+            return "".join(f'<p>{paragraph.text}</p>' for paragraph in paragraphs)
     except Exception as error:
         logging.error(f'Error in get_reader_mode_content: {error}')
         return None
-    finally:
-        if driver:
-            driver.quit()
 
 @app.route('/api/get_display_preferences', methods=['GET'])
 @login_required
